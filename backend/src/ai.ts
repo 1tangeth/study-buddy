@@ -1,7 +1,12 @@
-import OpenAI from 'openai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { streamText } from 'ai'
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+const gemini = createGoogleGenerativeAI({
+  baseURL: process.env.GEMINI_BASE_URL ?? 'https://ai.yesttool.top/v1beta',
+  apiKey: process.env.GEMINI_API_KEY ?? '',
+})
+
+const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   explain:
@@ -27,19 +32,17 @@ export async function* streamAnswer(
   const system = SYSTEM_PROMPTS[action] ?? SYSTEM_PROMPTS.free
   const truncated = docText.slice(0, MAX_DOC_CHARS)
 
-  const stream = await client.chat.completions.create({
-    model: MODEL,
-    stream: true,
-    max_tokens: 1500,
-    temperature: 0.7,
+  const result = streamText({
+    model: gemini(MODEL),
+    system,
     messages: [
-      { role: 'system', content: system },
       { role: 'user', content: `Document:\n\n${truncated}\n\n---\n\nUser: ${question}` },
     ],
+    maxTokens: 1500,
+    temperature: 0.7,
   })
 
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content
-    if (delta) yield delta
+  for await (const delta of result.textStream) {
+    yield delta
   }
 }
