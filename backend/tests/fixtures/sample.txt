@@ -1,0 +1,36 @@
+Introduction to Probability Theory
+
+1. Basic Definitions
+A probability is a number between 0 and 1 representing the likelihood of an event occurring.
+- P(A) = 0 means the event is impossible
+- P(A) = 1 means the event is certain
+
+2. Bayes' Theorem
+P(A|B) = P(B|A) * P(A) / P(B)
+
+Variables:
+- P(A|B): posterior probability — probability of A given that B occurred
+- P(B|A): likelihood — probability of B given A
+- P(A):   prior probability of A
+- P(B):   marginal probability of B (normalizing constant)
+
+Example: A medical test has 99% sensitivity and 99% specificity. If 1% of the population
+has a disease, what is the probability a positive test means you actually have the disease?
+
+P(disease|positive) = (0.99 * 0.01) / ((0.99 * 0.01) + (0.01 * 0.99)) = 0.5
+
+3. Central Limit Theorem
+As sample size n increases, the sampling distribution of the sample mean approaches
+a normal distribution with mean μ and standard deviation σ/√n, regardless of the
+shape of the underlying population distribution.
+
+4. Practice Problems
+Q1: If P(A) = 0.3, P(B|A) = 0.7, and P(B) = 0.4, what is P(A|B)?
+A1: P(A|B) = (0.7 × 0.3) / 0.4 = 0.525
+
+Q2: A fair coin is flipped 100 times. What is the expected number of heads?
+A2: E[X] = np = 100 × 0.5 = 50, with variance np(1-p) = 25, std dev = 5
+
+Q3: What does it mean for two events to be independent?
+A3: Events A and B are independent if P(A|B) = P(A), meaning knowing B occurred
+    does not change the probability of A.

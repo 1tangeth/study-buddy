@@ -4,7 +4,10 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "vitest run tests/gemini.live.test.ts --reporter=verbose"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.0.0",
@@ -21,7 +24,10 @@
     "@types/multer": "^1.4.11",
     "@types/node": "^20.14.10",
     "@types/pdf-parse": "^1.1.4",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.0"
   }
 }

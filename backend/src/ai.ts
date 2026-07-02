@@ -6,7 +6,7 @@ const gemini = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY ?? '',
 })
 
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash'
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   explain:
@@ -42,7 +42,11 @@ export async function* streamAnswer(
     temperature: 0.7,
   })
 
-  for await (const delta of result.textStream) {
-    yield delta
+  for await (const part of result.fullStream) {
+    if (part.type === 'text-delta') {
+      yield part.textDelta
+    } else if (part.type === 'error') {
+      throw new Error(String((part as any).error ?? 'Unknown streaming error'))
+    }
   }
 }
