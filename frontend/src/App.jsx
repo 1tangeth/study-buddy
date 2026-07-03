@@ -3,7 +3,8 @@ import { marked } from 'marked'
 import markedKatex from 'marked-katex-extension'
 import 'katex/dist/katex.min.css'
 import './App.css'
-import { uploadFile } from './api.js'
+import { fetchQuiz, uploadFile } from './api.js'
+import QuizMode from './components/QuizMode.jsx'
 
 marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
 marked.use({ breaks: true })
@@ -24,6 +25,9 @@ export default function App() {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [quizData, setQuizData] = useState(null)
+  const [quizLoading, setQuizLoading] = useState(false)
+  const [quizError, setQuizError] = useState('')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const { stream, streaming } = useStream()
@@ -40,11 +44,27 @@ export default function App() {
       const result = await uploadFile(file)
       setDoc(result)
       setMessages([])
+      setQuizData(null)
+      setQuizError('')
       inputRef.current?.focus()
     } catch (e) {
       setUploadError(e.message)
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function handleQuizMe() {
+    if (!doc || quizLoading || streaming) return
+    setQuizLoading(true)
+    setQuizError('')
+    try {
+      const data = await fetchQuiz(doc.doc_id)
+      setQuizData(data)
+    } catch (e) {
+      setQuizError(e.message)
+    } finally {
+      setQuizLoading(false)
     }
   }
 
@@ -108,61 +128,85 @@ export default function App() {
       </aside>
 
       <main className="chat-panel">
-        <div className="messages" role="log">
-          {messages.length === 0 && (
-            <div className="empty-state">
-              {doc
-                ? <>Choose an action below or type your question.</>
-                : <>Upload a <strong>.pdf</strong> or <strong>.txt</strong> file to get started.</>}
-            </div>
-          )}
+        {quizLoading && (
+          <div className="quiz-loading">
+            <div className="quiz-spinner" />
+            <p>Generating your quiz…</p>
+            <p className="quiz-loading-sub">This may take a few seconds</p>
+          </div>
+        )}
 
-          {messages.map((msg, i) => (
-            <div key={i} className={`message ${msg.role}${msg.error ? ' error' : ''}`}>
-              <div className="bubble">
-                {msg.role === 'assistant'
-                  ? <div className="md" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || '') }} />
-                  : msg.content}
-                {msg.pending && <span className="cursor" aria-hidden="true" />}
+        {quizData && !quizLoading && (
+          <QuizMode quiz={quizData} onExit={() => { setQuizData(null); setQuizError('') }} />
+        )}
+
+        {!quizData && !quizLoading && (
+          <>
+            <div className="messages" role="log">
+              {messages.length === 0 && (
+                <div className="empty-state">
+                  {doc
+                    ? <>Choose an action below or type your question.</>
+                    : <>Upload a <strong>.pdf</strong> or <strong>.txt</strong> file to get started.</>}
+                </div>
+              )}
+
+              {messages.map((msg, i) => (
+                <div key={i} className={`message ${msg.role}${msg.error ? ' error' : ''}`}>
+                  <div className="bubble">
+                    {msg.role === 'assistant'
+                      ? <div className="md" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || '') }} />
+                      : msg.content}
+                    {msg.pending && <span className="cursor" aria-hidden="true" />}
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="input-area">
+              <div className="actions-row">
+                {ACTIONS.map(a => (
+                  <button
+                    key={a.id}
+                    className="action-btn"
+                    disabled={!doc || streaming}
+                    onClick={() => sendMessage(a.prompt, a.id, a.label)}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+                <button
+                  className="action-btn quiz-me-btn"
+                  disabled={!doc || streaming || quizLoading}
+                  onClick={handleQuizMe}
+                >
+                  Quiz Me
+                </button>
+              </div>
+              {quizError && <p className="quiz-error">{quizError}</p>}
+
+              <div className="input-row">
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(input) }}
+                  placeholder={doc ? 'Ask anything about your document…' : 'Upload a document first'}
+                  disabled={!doc || streaming}
+                  aria-label="Question input"
+                />
+                <button
+                  className="send-btn"
+                  onClick={() => sendMessage(input)}
+                  disabled={!doc || !input.trim() || streaming}
+                >
+                  {streaming ? '…' : 'Ask'}
+                </button>
               </div>
             </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="input-area">
-          <div className="actions-row">
-            {ACTIONS.map(a => (
-              <button
-                key={a.id}
-                className="action-btn"
-                disabled={!doc || streaming}
-                onClick={() => sendMessage(a.prompt, a.id, a.label)}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="input-row">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(input) }}
-              placeholder={doc ? 'Ask anything about your document…' : 'Upload a document first'}
-              disabled={!doc || streaming}
-              aria-label="Question input"
-            />
-            <button
-              className="send-btn"
-              onClick={() => sendMessage(input)}
-              disabled={!doc || !input.trim() || streaming}
-            >
-              {streaming ? '…' : 'Ask'}
-            </button>
-          </div>
-        </div>
+          </>
+        )}
       </main>
     </div>
   )

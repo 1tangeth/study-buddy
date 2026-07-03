@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { streamText } from 'ai'
+import { generateText, streamText } from 'ai'
 
 
 // from google's ai-sdk , create gemini object with baseURL and apiKey
@@ -27,6 +27,38 @@ const SYSTEM_PROMPTS: Record<string, string> = {
     'You are a problem creator. Create a worked example problem based on the document content. Show a clear step-by-step solution. Make it realistic and non-trivial.',
   free: "You are a helpful study assistant. Answer the user's question based only on the provided document. Be clear and concise. If the answer isn't in the document, say so.",
 }
+
+const QUIZ_PROMPT = `You are a quiz generator. Generate exactly 5 quiz questions based on the provided document.
+
+IMPORTANT: Return ONLY a valid JSON object — no markdown formatting, no code blocks, no explanation. Just raw JSON.
+
+Required JSON structure:
+{
+  "questions": [
+    {
+      "id": 1,
+      "type": "multiple_choice",
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "answer": "Option B",
+      "explanation": "Brief explanation of why this is correct."
+    },
+    {
+      "id": 2,
+      "type": "short_answer",
+      "question": "Question text here?",
+      "answer": "Concise expected answer.",
+      "explanation": "Brief explanation."
+    }
+  ]
+}
+
+Rules:
+- Include at least 2 multiple_choice and at least 2 short_answer questions
+- For multiple_choice: exactly 4 options; answer must match one option verbatim
+- For short_answer: answer should be 1-3 sentences max
+- explanation: 1-2 sentences explaining the correct answer
+- Base all questions strictly on the provided document content`
 
 // maximum imput characters
 const MAX_DOC_CHARS = 80_000
@@ -68,4 +100,36 @@ export async function* streamAnswer(
       throw new Error(String((part as any).error ?? 'Unknown streaming error'))
     }
   }
+}
+
+export interface QuizQuestion {
+  id: number
+  type: 'multiple_choice' | 'short_answer'
+  question: string
+  options?: string[]
+  answer: string
+  explanation: string
+}
+
+export interface QuizData {
+  questions: QuizQuestion[]
+}
+
+function extractJSON(text: string): string {
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  return match ? match[1].trim() : text.trim()
+}
+
+export async function generateQuiz(docText: string): Promise<QuizData> {
+  const truncated = docText.slice(0, MAX_DOC_CHARS)
+
+  const { text } = await generateText({
+    model: gemini(MODEL),
+    system: QUIZ_PROMPT,
+    messages: [{ role: 'user', content: `Document:\n\n${truncated}` }],
+    maxTokens: 4096,
+    temperature: 0.7,
+  })
+
+  return JSON.parse(extractJSON(text)) as QuizData
 }
