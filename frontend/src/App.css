@@ -129,13 +129,53 @@ body {
   border-radius: 18px;
   font-size: 0.88rem;
   line-height: 1.65;
-  white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ── Markdown rendering inside assistant bubbles ── */
+.md { display: block; }
+.md p  { margin: 0 0 0.6em; }
+.md p:last-child { margin-bottom: 0; }
+.md strong { font-weight: 700; }
+.md em { font-style: italic; }
+.md h1, .md h2, .md h3 {
+  font-weight: 700;
+  margin: 0.8em 0 0.3em;
+  line-height: 1.3;
+}
+.md h1 { font-size: 1.1em; }
+.md h2 { font-size: 1.0em; }
+.md h3 { font-size: 0.95em; }
+.md ul, .md ol {
+  margin: 0.4em 0 0.6em 1.4em;
+  padding: 0;
+}
+.md li { margin-bottom: 0.25em; }
+.md hr {
+  border: none;
+  border-top: 1px solid #e0e0e8;
+  margin: 0.8em 0;
+}
+.md code {
+  background: #f0f0f8;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85em;
+}
+.md pre {
+  background: #f0f0f8;
+  border-radius: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.md pre code { background: none; padding: 0; }
 .message.user .bubble {
   background: #7c6af7;
   color: #fff;
   border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
 }
 .message.assistant .bubble {
   background: #fff;

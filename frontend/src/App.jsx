@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { marked } from 'marked'
 import './App.css'
+
+marked.use({ breaks: true })
 import { uploadFile } from './api.js'
 import { useStream } from './hooks/useStream.js'
 
@@ -114,7 +117,9 @@ export default function App() {
           {messages.map((msg, i) => (
             <div key={i} className={`message ${msg.role}${msg.error ? ' error' : ''}`}>
               <div className="bubble">
-                {msg.content}
+                {msg.role === 'assistant'
+                  ? <div className="md" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || '') }} />
+                  : msg.content}
                 {msg.pending && <span className="cursor" aria-hidden="true" />}
               </div>
             </div>
