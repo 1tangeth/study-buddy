@@ -9,14 +9,24 @@ export interface Doc {
 
 const MAX_DOCS = 20
 const store = new Map<string, Doc>()
+// stores all the document ids
 const order: string[] = []
 
+/**
+ * 
+ * @param filename 
+ * @param text 
+ * @returns 
+ */
 export function saveDoc(filename: string, text: string): string {
+  // create a number id for document
   const docId = crypto.randomUUID()
+  // remove oldest doc if I now have more than maximum document allowed
   if (order.length >= MAX_DOCS) {
     const oldest = order.shift()!
     store.delete(oldest)
   }
+
   store.set(docId, {
     docId,
     filename,
