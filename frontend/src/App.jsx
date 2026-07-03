@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
+import markedKatex from 'marked-katex-extension'
+import 'katex/dist/katex.min.css'
 import './App.css'
-
-marked.use({ breaks: true })
 import { uploadFile } from './api.js'
+
+marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
+marked.use({ breaks: true })
 import { useStream } from './hooks/useStream.js'
 
 const ACTIONS = [
