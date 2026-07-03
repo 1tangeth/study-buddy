@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { streamText } from 'ai'
+import { generateText, streamText } from 'ai'
 
 
 // from google's ai-sdk , create gemini object with baseURL and apiKey
@@ -28,8 +28,32 @@ const SYSTEM_PROMPTS: Record<string, string> = {
   free: "You are a helpful study assistant. Answer the user's question based only on the provided document. Be clear and concise. If the answer isn't in the document, say so.",
 }
 
+const FLASHCARDS_PROMPT = `You are a flash card generator. Analyze the document and generate exactly 10 flash cards tailored to its content type.
+
+Adapt the card style to the document:
+- Vocabulary / language learning: front = word or phrase in source language; back = translation + romanization or pronunciation guide if applicable
+- Essay / notes / textbook: front = key concept or topic name; back = concise explanation in 2-4 sentences
+- Math / physics / formulas: mix two card types:
+    (a) front = name or plain-English description of the formula (e.g. "Bayes Theorem"); back = formula using LaTeX $...$ notation plus a one-line variable legend
+    (b) front = short example problem pattern; back = formula or step-by-step logic used to solve it
+- Coding / algorithms / LeetCode: front = problem name or pattern description; back = algorithm approach + time/space complexity
+
+Rules:
+- Return ONLY a valid JSON object — no markdown, no code blocks, no commentary
+- Generate exactly 10 cards
+- Back content may use markdown (bold, bullet points) and inline LaTeX ($...$)
+- Keep fronts concise (1-2 lines); backs may be 2-6 lines
+
+JSON format:
+{"cards":[{"front":"...","back":"..."}]}`
+
 // maximum imput characters
 const MAX_DOC_CHARS = 80_000
+
+function extractJSON(text: string): string {
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  return match ? match[1].trim() : text.trim()
+}
 
 // Other file can import and use this function
 // this function streams an AI answer piece by piece
@@ -59,7 +83,7 @@ export async function* streamAnswer(
   /**
    * await the result from Gemini
    * if reusllt is text, yield(pause execution and returns text data)
-   * 
+   *
    */
   for await (const part of result.fullStream) {
     if (part.type === 'text-delta') {
@@ -68,4 +92,27 @@ export async function* streamAnswer(
       throw new Error(String((part as any).error ?? 'Unknown streaming error'))
     }
   }
+}
+
+export interface Flashcard {
+  front: string
+  back: string
+}
+
+export interface FlashcardDeck {
+  cards: Flashcard[]
+}
+
+export async function generateFlashcards(docText: string): Promise<FlashcardDeck> {
+  const truncated = docText.slice(0, MAX_DOC_CHARS)
+
+  const { text } = await generateText({
+    model: gemini(MODEL),
+    system: FLASHCARDS_PROMPT,
+    messages: [{ role: 'user', content: `Document:\n\n${truncated}` }],
+    maxTokens: 4096,
+    temperature: 0.7,
+  })
+
+  return JSON.parse(extractJSON(text)) as FlashcardDeck
 }
