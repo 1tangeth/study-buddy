@@ -50,7 +50,7 @@ export async function* streamAnswer(
     messages: [
       { role: 'user', content: `Document:\n\n${truncated}\n\n---\n\nUser: ${question}` },
     ],
-    maxTokens: 1500,
+    maxTokens: 3000,
     temperature: 0.7,
   })
 
