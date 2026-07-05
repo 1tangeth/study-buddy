@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { marked } from 'marked'
-import markedKatex from 'marked-katex-extension'
+import { marked } from './lib/md.js'
 import 'katex/dist/katex.min.css'
 import './App.css'
-import { uploadFile } from './api.js'
-
-marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
-marked.use({ breaks: true })
+import { fetchFlashcards, uploadFile } from './api.js'
+import FlashCards from './components/FlashCards.jsx'
 import { useStream } from './hooks/useStream.js'
 
 const ACTIONS = [
-  { id: 'explain',   label: 'Explain Simply',       prompt: 'Explain the key concepts from this document simply.' },
-  { id: 'summarize', label: 'Summarize',             prompt: 'Summarize this document.' },
-  { id: 'quiz',      label: 'Practice Questions',    prompt: 'Generate 5 practice questions based on this document.' },
-  { id: 'formula',   label: 'Formula Cues',          prompt: 'Extract and explain all the key formulas from this document.' },
-  { id: 'example',   label: 'Example Problem',       prompt: 'Create a worked example problem based on this document.' },
+  { id: 'explain',   label: 'Explain Simply',    prompt: 'Explain the key concepts from this document simply.' },
+  { id: 'summarize', label: 'Summarize',          prompt: 'Summarize this document.' },
+  { id: 'quiz',      label: 'Practice Questions', prompt: 'Generate 5 practice questions based on this document.' },
+  { id: 'formula',   label: 'Formula Cues',       prompt: 'Extract and explain all the key formulas from this document.' },
+  { id: 'example',   label: 'Example Problem',    prompt: 'Create a worked example problem based on this document.' },
 ]
 
 export default function App() {
@@ -24,6 +21,9 @@ export default function App() {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [flashData, setFlashData] = useState(null)
+  const [flashLoading, setFlashLoading] = useState(false)
+  const [flashError, setFlashError] = useState('')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const { stream, streaming } = useStream()
@@ -40,11 +40,27 @@ export default function App() {
       const result = await uploadFile(file)
       setDoc(result)
       setMessages([])
+      setFlashData(null)
+      setFlashError('')
       inputRef.current?.focus()
     } catch (e) {
       setUploadError(e.message)
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function handleFlashCards() {
+    if (!doc || flashLoading || streaming) return
+    setFlashLoading(true)
+    setFlashError('')
+    try {
+      const data = await fetchFlashcards(doc.doc_id)
+      setFlashData(data)
+    } catch (e) {
+      setFlashError(e.message)
+    } finally {
+      setFlashLoading(false)
     }
   }
 
@@ -108,61 +124,85 @@ export default function App() {
       </aside>
 
       <main className="chat-panel">
-        <div className="messages" role="log">
-          {messages.length === 0 && (
-            <div className="empty-state">
-              {doc
-                ? <>Choose an action below or type your question.</>
-                : <>Upload a <strong>.pdf</strong> or <strong>.txt</strong> file to get started.</>}
-            </div>
-          )}
+        {flashLoading && (
+          <div className="fc-loading">
+            <div className="fc-spinner" />
+            <p>Generating flash cards…</p>
+            <p className="fc-loading-sub">This may take a few seconds</p>
+          </div>
+        )}
 
-          {messages.map((msg, i) => (
-            <div key={i} className={`message ${msg.role}${msg.error ? ' error' : ''}`}>
-              <div className="bubble">
-                {msg.role === 'assistant'
-                  ? <div className="md" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || '') }} />
-                  : msg.content}
-                {msg.pending && <span className="cursor" aria-hidden="true" />}
+        {flashData && !flashLoading && (
+          <FlashCards deck={flashData} onExit={() => { setFlashData(null); setFlashError('') }} />
+        )}
+
+        {!flashData && !flashLoading && (
+          <>
+            <div className="messages" role="log">
+              {messages.length === 0 && (
+                <div className="empty-state">
+                  {doc
+                    ? <>Choose an action below or type your question.</>
+                    : <>Upload a <strong>.pdf</strong> or <strong>.txt</strong> file to get started.</>}
+                </div>
+              )}
+
+              {messages.map((msg, i) => (
+                <div key={i} className={`message ${msg.role}${msg.error ? ' error' : ''}`}>
+                  <div className="bubble">
+                    {msg.role === 'assistant'
+                      ? <div className="md" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || '') }} />
+                      : msg.content}
+                    {msg.pending && <span className="cursor" aria-hidden="true" />}
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="input-area">
+              <div className="actions-row">
+                {ACTIONS.map(a => (
+                  <button
+                    key={a.id}
+                    className="action-btn"
+                    disabled={!doc || streaming}
+                    onClick={() => sendMessage(a.prompt, a.id, a.label)}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+                <button
+                  className="action-btn flash-cards-btn"
+                  disabled={!doc || streaming || flashLoading}
+                  onClick={handleFlashCards}
+                >
+                  Flash Cards
+                </button>
+              </div>
+              {flashError && <p className="fc-error">{flashError}</p>}
+
+              <div className="input-row">
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(input) }}
+                  placeholder={doc ? 'Ask anything about your document…' : 'Upload a document first'}
+                  disabled={!doc || streaming}
+                  aria-label="Question input"
+                />
+                <button
+                  className="send-btn"
+                  onClick={() => sendMessage(input)}
+                  disabled={!doc || !input.trim() || streaming}
+                >
+                  {streaming ? '…' : 'Ask'}
+                </button>
               </div>
             </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="input-area">
-          <div className="actions-row">
-            {ACTIONS.map(a => (
-              <button
-                key={a.id}
-                className="action-btn"
-                disabled={!doc || streaming}
-                onClick={() => sendMessage(a.prompt, a.id, a.label)}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="input-row">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(input) }}
-              placeholder={doc ? 'Ask anything about your document…' : 'Upload a document first'}
-              disabled={!doc || streaming}
-              aria-label="Question input"
-            />
-            <button
-              className="send-btn"
-              onClick={() => sendMessage(input)}
-              disabled={!doc || !input.trim() || streaming}
-            >
-              {streaming ? '…' : 'Ask'}
-            </button>
-          </div>
-        </div>
+          </>
+        )}
       </main>
     </div>
   )

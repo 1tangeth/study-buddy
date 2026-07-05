@@ -1,3 +1,14 @@
+export async function fetchFlashcards(docId) {
+  const res = await fetch('/api/flashcards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: docId }),
+  })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.detail || 'Flash card generation failed')
+  return body
+}
+
 export async function uploadFile(file) {
   const form = new FormData()
   form.append('file', file)

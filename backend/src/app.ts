@@ -1,7 +1,7 @@
 import cors from 'cors'
 import express from 'express'
 import multer from 'multer'
-import { streamAnswer } from './ai'
+import { generateFlashcards, streamAnswer } from './ai'
 import { extractText } from './extract'
 import { getDoc, saveDoc } from './store'
 
@@ -136,4 +136,26 @@ app.post('/api/ask', async (req, res) => {
 
   res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
   res.end()
+})
+
+app.post('/api/flashcards', async (req, res) => {
+  if (!checkLimit(clientIp(req), 'flashcards', 3, 60_000)) {
+    return res.status(429).json({ detail: 'rate_limited' })
+  }
+
+  const { doc_id } = req.body as { doc_id: string }
+  if (!doc_id) return res.status(400).json({ detail: 'doc_id is required' })
+
+  const doc = getDoc(doc_id)
+  if (!doc) return res.status(404).json({ detail: 'Document not found — please re-upload' })
+
+  try {
+    const deck = await generateFlashcards(doc.text)
+    res.json(deck)
+  } catch (e: any) {
+    if (e instanceof SyntaxError) {
+      return res.status(422).json({ detail: 'Could not parse flash cards — please try again.' })
+    }
+    res.status(500).json({ detail: e.message ?? 'Flash card generation failed' })
+  }
 })
