@@ -143,14 +143,14 @@ app.post('/api/quiz', async (req, res) => {
     return res.status(429).json({ detail: 'rate_limited' })
   }
 
-  const { doc_id } = req.body as { doc_id: string }
+  const { doc_id, language = 'english' } = req.body as { doc_id: string; language?: string }
   if (!doc_id) return res.status(400).json({ detail: 'doc_id is required' })
 
   const doc = getDoc(doc_id)
   if (!doc) return res.status(404).json({ detail: 'Document not found — please re-upload' })
 
   try {
-    const quiz = await generateQuiz(doc.text)
+    const quiz = await generateQuiz(doc.text, language)
     res.json(quiz)
   } catch (e: any) {
     if (e instanceof SyntaxError) {

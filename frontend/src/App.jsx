@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { marked } from 'marked'
-import markedKatex from 'marked-katex-extension'
+import { marked } from './lib/md.js'
 import 'katex/dist/katex.min.css'
 import './App.css'
 import { fetchQuiz, uploadFile } from './api.js'
 import QuizMode from './components/QuizMode.jsx'
-
-marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
-marked.use({ breaks: true })
 import { useStream } from './hooks/useStream.js'
 
 const ACTIONS = [
@@ -28,6 +24,7 @@ export default function App() {
   const [quizData, setQuizData] = useState(null)
   const [quizLoading, setQuizLoading] = useState(false)
   const [quizError, setQuizError] = useState('')
+  const [quizLang, setQuizLang] = useState('english')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const { stream, streaming } = useStream()
@@ -59,7 +56,7 @@ export default function App() {
     setQuizLoading(true)
     setQuizError('')
     try {
-      const data = await fetchQuiz(doc.doc_id)
+      const data = await fetchQuiz(doc.doc_id, quizLang)
       setQuizData(data)
     } catch (e) {
       setQuizError(e.message)
@@ -125,6 +122,23 @@ export default function App() {
             <p className="preview-text">{doc.preview}…</p>
           </div>
         )}
+
+        <div className="lang-selector">
+          <label className="lang-label" htmlFor="quiz-lang">My language</label>
+          <select
+            id="quiz-lang"
+            className="lang-select"
+            value={quizLang}
+            onChange={e => setQuizLang(e.target.value)}
+          >
+            <option value="english">English</option>
+            <option value="japanese">Japanese</option>
+            <option value="korean">Korean</option>
+            <option value="chinese">Chinese</option>
+            <option value="spanish">Spanish</option>
+            <option value="french">French</option>
+          </select>
+        </div>
       </aside>
 
       <main className="chat-panel">

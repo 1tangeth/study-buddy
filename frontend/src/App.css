@@ -454,6 +454,7 @@ body {
 .grade-no:hover { background: #ffcdd2; }
 
 .reveal-explanation { font-size: 0.83rem; color: #555; line-height: 1.5; font-style: italic; }
+.reveal-explanation .md { font-size: inherit; color: inherit; line-height: inherit; }
 
 .quiz-next-btn {
   align-self: flex-start;
@@ -531,3 +532,36 @@ body {
   transition: background 0.13s, color 0.13s;
 }
 .back-to-chat-btn:hover { background: #7c6af7; color: #fff; }
+
+/* ── Language selector ────────────────────────── */
+.lang-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.lang-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #8888aa;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.lang-select {
+  width: 100%;
+  background: #1a1a30;
+  color: #e0e0e0;
+  border: 1px solid #3a3a5c;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.13s;
+  appearance: auto;
+}
+.lang-select:focus { border-color: #7c6af7; }

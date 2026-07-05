@@ -120,12 +120,33 @@ function extractJSON(text: string): string {
   return match ? match[1].trim() : text.trim()
 }
 
-export async function generateQuiz(docText: string): Promise<QuizData> {
+const LANGUAGE_NAMES: Record<string, string> = {
+  english: 'English',
+  japanese: 'Japanese',
+  korean: 'Korean',
+  chinese: 'Chinese',
+  spanish: 'Spanish',
+  french: 'French',
+}
+
+function bilingualInstruction(preferredLang: string): string {
+  const preferred = LANGUAGE_NAMES[preferredLang] ?? 'English'
+  return `
+
+LANGUAGE REQUIREMENT:
+1. Detect the language of the provided document.
+2. If the document is NOT written in ${preferred}: write ALL quiz fields (question, options, answer, explanation) bilingually — ${preferred} text first, then the document's original language text in parentheses. Example: "What is the formula for velocity? (속도의 공식은 무엇입니까?)"
+3. If the document IS already in ${preferred}: write all content in ${preferred} only — no bilingual format needed.
+For multiple_choice: the "answer" field must be character-for-character identical to one of the "options" strings (including bilingual format if used).`
+}
+
+export async function generateQuiz(docText: string, language = 'english'): Promise<QuizData> {
   const truncated = docText.slice(0, MAX_DOC_CHARS)
+  const system = QUIZ_PROMPT + bilingualInstruction(language)
 
   const { text } = await generateText({
     model: gemini(MODEL),
-    system: QUIZ_PROMPT,
+    system,
     messages: [{ role: 'user', content: `Document:\n\n${truncated}` }],
     maxTokens: 4096,
     temperature: 0.7,

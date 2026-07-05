@@ -1,4 +1,13 @@
 import { useState } from 'react'
+import { marked } from '../lib/md.js'
+
+function Inline({ text }) {
+  return <span dangerouslySetInnerHTML={{ __html: marked.parseInline(text || '') }} />
+}
+
+function Block({ text }) {
+  return <div className="md" dangerouslySetInnerHTML={{ __html: marked.parse(text || '') }} />
+}
 
 export default function QuizMode({ quiz, onExit }) {
   const [idx, setIdx] = useState(0)
@@ -68,7 +77,7 @@ export default function QuizMode({ quiz, onExit }) {
       </div>
 
       <div className="quiz-body">
-        <p className="quiz-question">{q.question}</p>
+        <p className="quiz-question"><Inline text={q.question} /></p>
 
         {isMCQ ? (
           <div className="mcq-options">
@@ -87,7 +96,7 @@ export default function QuizMode({ quiz, onExit }) {
                   disabled={submitted}
                   onClick={() => setSelected(opt)}
                 >
-                  {opt}
+                  <Inline text={opt} />
                 </button>
               )
             })}
@@ -119,12 +128,12 @@ export default function QuizMode({ quiz, onExit }) {
               <p className={`verdict ${selected === q.answer ? 'verdict-correct' : 'verdict-wrong'}`}>
                 {selected === q.answer
                   ? '✓ Correct!'
-                  : `✗ Incorrect — correct answer: ${q.answer}`}
+                  : <span>✗ Incorrect — correct answer: <Inline text={q.answer} /></span>}
               </p>
             ) : (
               <>
                 <div className="reveal-answer">
-                  <strong>Answer:</strong> {q.answer}
+                  <strong>Answer:</strong> <Inline text={q.answer} />
                 </div>
                 {selfGrade === null ? (
                   <div className="self-grade">
@@ -141,7 +150,7 @@ export default function QuizMode({ quiz, onExit }) {
                 )}
               </>
             )}
-            <p className="reveal-explanation">{q.explanation}</p>
+            <div className="reveal-explanation"><Block text={q.explanation} /></div>
             {showNext && (
               <button className="quiz-next-btn" onClick={handleNext}>
                 {idx + 1 < total ? 'Next Question →' : 'See Results'}
@@ -175,7 +184,7 @@ function ScoreScreen({ score, total, questions, scores, onExit }) {
         {questions.map((q, i) => (
           <div key={q.id} className={`score-row ${scores[i] ? 'row-correct' : 'row-wrong'}`}>
             <span className="row-icon">{scores[i] ? '✓' : '✗'}</span>
-            <span className="row-q">{q.question}</span>
+            <span className="row-q"><span dangerouslySetInnerHTML={{ __html: marked.parseInline(q.question || '') }} /></span>
           </div>
         ))}
       </div>
