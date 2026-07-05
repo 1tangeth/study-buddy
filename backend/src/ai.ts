@@ -76,6 +76,38 @@ Both front and back may use inline LaTeX ($...$) and markdown.
 Return ONLY raw JSON: {"cards":[{"front":"...","back":"..."}]}`,
 }
 
+const QUIZ_PROMPT = `You are a quiz generator. Generate exactly 5 quiz questions based on the provided document.
+
+IMPORTANT: Return ONLY a valid JSON object — no markdown formatting, no code blocks, no explanation. Just raw JSON.
+
+Required JSON structure:
+{
+  "questions": [
+    {
+      "id": 1,
+      "type": "multiple_choice",
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "answer": "Option B",
+      "explanation": "Brief explanation of why this is correct."
+    },
+    {
+      "id": 2,
+      "type": "short_answer",
+      "question": "Question text here?",
+      "answer": "Concise expected answer.",
+      "explanation": "Brief explanation."
+    }
+  ]
+}
+
+Rules:
+- Include at least 2 multiple_choice and at least 2 short_answer questions
+- For multiple_choice: exactly 4 options; answer must match one option verbatim
+- For short_answer: answer should be 1-3 sentences max
+- explanation: 1-2 sentences explaining the correct answer
+- Base all questions strictly on the provided document content`
+
 // maximum imput characters
 const MAX_DOC_CHARS = 80_000
 
@@ -123,6 +155,8 @@ export async function* streamAnswer(
   }
 }
 
+// ── Flash Cards ──────────────────────────────────────��─────────────────────
+
 export interface Flashcard {
   front: string
   back: string
@@ -163,4 +197,54 @@ export async function generateFlashcards(docText: string): Promise<FlashcardDeck
   })
 
   return JSON.parse(extractJSON(text)) as FlashcardDeck
+}
+
+// ── Quiz ───────────────────────────────────────────────────────────────────
+
+export interface QuizQuestion {
+  id: number
+  type: 'multiple_choice' | 'short_answer'
+  question: string
+  options?: string[]
+  answer: string
+  explanation: string
+}
+
+export interface QuizData {
+  questions: QuizQuestion[]
+}
+
+const LANGUAGE_NAMES: Record<string, string> = {
+  english: 'English',
+  japanese: 'Japanese',
+  korean: 'Korean',
+  chinese: 'Chinese',
+  spanish: 'Spanish',
+  french: 'French',
+}
+
+function bilingualInstruction(preferredLang: string): string {
+  const preferred = LANGUAGE_NAMES[preferredLang] ?? 'English'
+  return `
+
+LANGUAGE REQUIREMENT:
+1. Detect the language of the provided document.
+2. If the document is NOT written in ${preferred}: write ALL quiz fields (question, options, answer, explanation) bilingually — ${preferred} text first, then the document's original language text in parentheses. Example: "What is the formula for velocity? (속도의 공식은 무엇입니까?)"
+3. If the document IS already in ${preferred}: write all content in ${preferred} only — no bilingual format needed.
+For multiple_choice: the "answer" field must be character-for-character identical to one of the "options" strings (including bilingual format if used).`
+}
+
+export async function generateQuiz(docText: string, language = 'english'): Promise<QuizData> {
+  const truncated = docText.slice(0, MAX_DOC_CHARS)
+  const system = QUIZ_PROMPT + bilingualInstruction(language)
+
+  const { text } = await generateText({
+    model: gemini(MODEL),
+    system,
+    messages: [{ role: 'user', content: `Document:\n\n${truncated}` }],
+    maxTokens: 4096,
+    temperature: 0.7,
+  })
+
+  return JSON.parse(extractJSON(text)) as QuizData
 }

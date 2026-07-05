@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { marked } from './lib/md.js'
 import 'katex/dist/katex.min.css'
 import './App.css'
-import { fetchFlashcards, uploadFile } from './api.js'
+import { fetchFlashcards, fetchQuiz, uploadFile } from './api.js'
 import FlashCards from './components/FlashCards.jsx'
+import QuizMode from './components/QuizMode.jsx'
 import { useStream } from './hooks/useStream.js'
 
 const ACTIONS = [
@@ -24,6 +25,10 @@ export default function App() {
   const [flashData, setFlashData] = useState(null)
   const [flashLoading, setFlashLoading] = useState(false)
   const [flashError, setFlashError] = useState('')
+  const [quizData, setQuizData] = useState(null)
+  const [quizLoading, setQuizLoading] = useState(false)
+  const [quizError, setQuizError] = useState('')
+  const [quizLang, setQuizLang] = useState('english')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const { stream, streaming } = useStream()
@@ -42,6 +47,8 @@ export default function App() {
       setMessages([])
       setFlashData(null)
       setFlashError('')
+      setQuizData(null)
+      setQuizError('')
       inputRef.current?.focus()
     } catch (e) {
       setUploadError(e.message)
@@ -61,6 +68,20 @@ export default function App() {
       setFlashError(e.message)
     } finally {
       setFlashLoading(false)
+    }
+  }
+
+  async function handleQuizMe() {
+    if (!doc || quizLoading || streaming) return
+    setQuizLoading(true)
+    setQuizError('')
+    try {
+      const data = await fetchQuiz(doc.doc_id, quizLang)
+      setQuizData(data)
+    } catch (e) {
+      setQuizError(e.message)
+    } finally {
+      setQuizLoading(false)
     }
   }
 
@@ -90,6 +111,8 @@ export default function App() {
         }),
     })
   }
+
+  const anyModeActive = flashData || flashLoading || quizData || quizLoading
 
   return (
     <div className="app">
@@ -121,10 +144,39 @@ export default function App() {
             <p className="preview-text">{doc.preview}…</p>
           </div>
         )}
+
+        <div className="lang-selector">
+          <label className="lang-label" htmlFor="quiz-lang">My language</label>
+          <select
+            id="quiz-lang"
+            className="lang-select"
+            value={quizLang}
+            onChange={e => setQuizLang(e.target.value)}
+          >
+            <option value="english">English</option>
+            <option value="japanese">Japanese</option>
+            <option value="korean">Korean</option>
+            <option value="chinese">Chinese</option>
+            <option value="spanish">Spanish</option>
+            <option value="french">French</option>
+          </select>
+        </div>
       </aside>
 
       <main className="chat-panel">
-        {flashLoading && (
+        {quizLoading && (
+          <div className="quiz-loading">
+            <div className="quiz-spinner" />
+            <p>Generating your quiz…</p>
+            <p className="quiz-loading-sub">This may take a few seconds</p>
+          </div>
+        )}
+
+        {quizData && !quizLoading && (
+          <QuizMode quiz={quizData} onExit={() => { setQuizData(null); setQuizError('') }} />
+        )}
+
+        {flashLoading && !quizData && !quizLoading && (
           <div className="fc-loading">
             <div className="fc-spinner" />
             <p>Generating flash cards…</p>
@@ -132,11 +184,11 @@ export default function App() {
           </div>
         )}
 
-        {flashData && !flashLoading && (
+        {flashData && !flashLoading && !quizData && !quizLoading && (
           <FlashCards deck={flashData} onExit={() => { setFlashData(null); setFlashError('') }} />
         )}
 
-        {!flashData && !flashLoading && (
+        {!anyModeActive && (
           <>
             <div className="messages" role="log">
               {messages.length === 0 && (
@@ -179,8 +231,16 @@ export default function App() {
                 >
                   Flash Cards
                 </button>
+                <button
+                  className="action-btn quiz-me-btn"
+                  disabled={!doc || streaming || quizLoading}
+                  onClick={handleQuizMe}
+                >
+                  Quiz Me
+                </button>
               </div>
               {flashError && <p className="fc-error">{flashError}</p>}
+              {quizError && <p className="quiz-error">{quizError}</p>}
 
               <div className="input-row">
                 <input

@@ -1,12 +1,12 @@
 import cors from 'cors'
 import express from 'express'
 import multer from 'multer'
-import { generateFlashcards, streamAnswer } from './ai'
+import { generateFlashcards, generateQuiz, streamAnswer } from './ai'
 import { extractText } from './extract'
 import { getDoc, saveDoc } from './store'
 
 // create express server object
-export const app = express() 
+export const app = express()
 // upload object setting
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
@@ -17,20 +17,20 @@ app.use(express.json())
 
 
 // Rate Limiting: don't let one user send too many requests too quickly
-// rl is a notebook that records request time 
+// rl is a notebook that records request time
 // e.g. ""upload:127.0.0.1"" , [1720000000000, 1720000005000, 1720000009000] (array of time stamps)
-const rl = new Map<string, number[]>() 
+const rl = new Map<string, number[]>()
 
 // "export" allows another file to import this function
 export const _resetRateLimiter = () => rl.clear() // when this function is called, it runs r1.clear() that removes every saved timestamp from the map
 
 /**
  * Checks if whether a user is still allowed to make a request
- * @param ip 
+ * @param ip
  * @param bucket category of request e.g "upload" "ask"
  * @param max maximum number of request
- * @param windowMs time window 
- * @returns 
+ * @param windowMs time window
+ * @returns
  */
 function checkLimit(ip: string, bucket: string, max: number, windowMs: number): boolean {
   const key = `${bucket}:${ip}` // create unique key
@@ -115,11 +115,11 @@ app.post('/api/ask', async (req, res) => {
   if (!doc_id || !question?.trim()) {
     return res.status(400).json({ detail: 'doc_id and question are required' })
   }
-  
+
   // get document
   const doc = getDoc(doc_id)
   if (!doc) return res.status(404).json({ detail: 'Document not found — please re-upload' })
-  
+
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('X-Accel-Buffering', 'no')
@@ -157,5 +157,27 @@ app.post('/api/flashcards', async (req, res) => {
       return res.status(422).json({ detail: 'Could not parse flash cards — please try again.' })
     }
     res.status(500).json({ detail: e.message ?? 'Flash card generation failed' })
+  }
+})
+
+app.post('/api/quiz', async (req, res) => {
+  if (!checkLimit(clientIp(req), 'quiz', 3, 60_000)) {
+    return res.status(429).json({ detail: 'rate_limited' })
+  }
+
+  const { doc_id, language = 'english' } = req.body as { doc_id: string; language?: string }
+  if (!doc_id) return res.status(400).json({ detail: 'doc_id is required' })
+
+  const doc = getDoc(doc_id)
+  if (!doc) return res.status(404).json({ detail: 'Document not found — please re-upload' })
+
+  try {
+    const quiz = await generateQuiz(doc.text, language)
+    res.json(quiz)
+  } catch (e: any) {
+    if (e instanceof SyntaxError) {
+      return res.status(422).json({ detail: 'Could not parse quiz — please try again.' })
+    }
+    res.status(500).json({ detail: e.message ?? 'Quiz generation failed' })
   }
 })
