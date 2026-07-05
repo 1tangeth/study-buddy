@@ -49,7 +49,10 @@ export default function FlashCards({ deck, onExit }) {
           <div className={`fc-card${flipped ? ' fc-flipped' : ''}`}>
             <div className="fc-face fc-front">
               <span className="fc-side-label">front</span>
-              <div className="fc-text">{card.front}</div>
+              <div
+                className="fc-text"
+                dangerouslySetInnerHTML={{ __html: marked.parseInline(card.front || '') }}
+              />
               <span className="fc-tap-hint">click to flip</span>
             </div>
             <div className="fc-face fc-back">
@@ -76,13 +79,10 @@ export default function FlashCards({ deck, onExit }) {
           >
             {flipped ? 'Show Front' : 'Flip ↗'}
           </button>
-          <button
-            className="fc-nav-btn"
-            disabled={idx === total - 1}
-            onClick={e => { e.stopPropagation(); goTo(idx + 1) }}
-          >
-            Next →
-          </button>
+          {idx === total - 1
+            ? <button className="fc-nav-btn fc-exit-last" onClick={e => { e.stopPropagation(); onExit() }}>Exit</button>
+            : <button className="fc-nav-btn" onClick={e => { e.stopPropagation(); goTo(idx + 1) }}>Next →</button>
+          }
         </div>
 
         <p className="fc-keyboard-hint">← → to navigate · Space to flip</p>
