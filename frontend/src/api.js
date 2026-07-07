@@ -56,6 +56,15 @@ export async function fetchMe() {
 
 // ── Document history ──────────────────────────────────────────────────────
 
+export async function fetchActiveSession(docId) {
+  const res = await fetch(`/api/documents/${docId}/active-session`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 export async function fetchDocuments() {
   const res = await fetch('/api/documents', { headers: authHeaders(), credentials: 'include' })
   if (!res.ok) throw new Error('Failed to load documents')

@@ -5,7 +5,7 @@ export function useStream() {
   const [streaming, setStreaming] = useState(false)
   const abortRef = useRef(null)
 
-  const stream = useCallback(async ({ docId, question, action, onDelta, onError, onDone }) => {
+  const stream = useCallback(async ({ docId, question, action, sessionId, onSession, onDelta, onError, onDone }) => {
     if (abortRef.current) abortRef.current.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -20,7 +20,7 @@ export function useStream() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: 'include',
-        body: JSON.stringify({ doc_id: docId, question, action }),
+        body: JSON.stringify({ doc_id: docId, question, action, session_id: sessionId }),
         signal: controller.signal,
       })
 
@@ -43,6 +43,7 @@ export function useStream() {
           if (!line.startsWith('data: ')) continue
           try {
             const data = JSON.parse(line.slice(6))
+            if (data.session_id) onSession?.(data.session_id)
             if (data.delta) onDelta(data.delta)
             if (data.error) { onError?.(data.error); return }
             if (data.done) { onDone?.(); return }

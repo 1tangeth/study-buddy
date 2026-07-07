@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { marked } from './lib/md.js'
 import 'katex/dist/katex.min.css'
 import './App.css'
-import { deleteDocument, fetchDocuments, fetchFlashcards, fetchQuiz, uploadFile } from './api.js'
+import { deleteDocument, fetchActiveSession, fetchDocuments, fetchFlashcards, fetchQuiz, uploadFile } from './api.js'
 import AuthPage from './components/AuthPage.jsx'
 import FlashCards from './components/FlashCards.jsx'
 import QuizMode from './components/QuizMode.jsx'
@@ -33,6 +33,7 @@ export default function App() {
 function AuthenticatedApp({ user, onLogout }) {
   const [doc, setDoc] = useState(null)
   const [docHistory, setDocHistory] = useState([])
+  const [sessionId, setSessionId] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -64,18 +65,27 @@ function AuthenticatedApp({ user, onLogout }) {
     } catch { /* silently ignore */ }
   }
 
-  function handleSelectDoc(histDoc) {
+  async function handleSelectDoc(histDoc) {
     setDoc({
       doc_id: histDoc.id,
       filename: histDoc.filename,
       char_count: histDoc.charCount,
       preview: histDoc.preview,
     })
-    setMessages([])
     setFlashData(null)
     setFlashError('')
     setQuizData(null)
     setQuizError('')
+
+    // restore the most recent chat session for this document
+    const session = await fetchActiveSession(histDoc.id)
+    if (session) {
+      setSessionId(session.sessionId)
+      setMessages(session.messages.map(m => ({ role: m.role, content: m.content })))
+    } else {
+      setSessionId(null)
+      setMessages([])
+    }
     inputRef.current?.focus()
   }
 
@@ -100,6 +110,7 @@ function AuthenticatedApp({ user, onLogout }) {
     try {
       const result = await uploadFile(file)
       setDoc(result)
+      setSessionId(null)
       setMessages([])
       setFlashData(null)
       setFlashError('')
@@ -153,6 +164,8 @@ function AuthenticatedApp({ user, onLogout }) {
       docId: doc.doc_id,
       question,
       action,
+      sessionId,
+      onSession: id => setSessionId(id),
       onDelta: delta =>
         setMessages(prev => {
           const next = [...prev]

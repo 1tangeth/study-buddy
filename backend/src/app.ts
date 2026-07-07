@@ -186,6 +186,26 @@ app.delete('/api/documents/:id', requireAuth, async (req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/documents/:id/active-session', requireAuth, async (req, res) => {
+  const { userId } = req as AuthRequest
+  const doc = await db.document.findUnique({ where: { id: req.params.id } })
+  if (!doc || doc.userId !== userId) return res.status(404).json({ detail: 'Document not found' })
+
+  const session = await db.chatSession.findFirst({
+    where: { documentId: req.params.id, userId },
+    orderBy: { lastActive: 'desc' },
+    include: {
+      messages: {
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, role: true, content: true, createdAt: true },
+      },
+    },
+  })
+
+  if (!session) return res.json(null)
+  res.json({ sessionId: session.id, messages: session.messages })
+})
+
 app.get('/api/documents/:id/sessions', requireAuth, async (req, res) => {
   const { userId } = req as AuthRequest
   const doc = await db.document.findUnique({ where: { id: req.params.id } })
