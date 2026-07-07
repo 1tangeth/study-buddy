@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { saveQuizAttempt } from '../api.js'
 import { marked } from '../lib/md.js'
 
 function Inline({ text }) {
@@ -55,6 +56,7 @@ export default function QuizMode({ quiz, onExit }) {
         questions={questions}
         scores={scores}
         onExit={onExit}
+        meta={quiz._meta}
       />
     )
   }
@@ -163,7 +165,13 @@ export default function QuizMode({ quiz, onExit }) {
   )
 }
 
-function ScoreScreen({ score, total, questions, scores, onExit }) {
+function ScoreScreen({ score, total, questions, scores, onExit, meta }) {
+  useEffect(() => {
+    if (meta?.documentId) {
+      saveQuizAttempt(meta.documentId, score, total, meta.language ?? 'english').catch(() => {})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const pct = Math.round((score / total) * 100)
   const message =
     pct >= 80 ? 'Great job!' :

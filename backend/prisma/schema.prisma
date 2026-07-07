@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String?  @map("display_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  documents    Document[]
+  chatSessions ChatSession[]
+  quizAttempts QuizAttempt[]
+
+  @@map("users")
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  filename    String
+  text        String
+  charCount   Int      @map("char_count")
+  contentHash String?  @map("content_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatSessions ChatSession[]
+  quizAttempts QuizAttempt[]
+
+  @@unique([userId, contentHash])
+  @@map("documents")
+}
+
+model ChatSession {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  documentId String   @map("document_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastActive DateTime @default(now()) @map("last_active")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("chat_sessions")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  role      String
+  content   String
+  action    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model QuizAttempt {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  documentId String   @map("document_id")
+  score      Int
+  total      Int
+  language   String   @default("english")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
+}

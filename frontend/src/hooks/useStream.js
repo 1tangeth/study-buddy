@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { getAccessToken } from '../api.js'
 
 export function useStream() {
   const [streaming, setStreaming] = useState(false)
@@ -11,9 +12,14 @@ export function useStream() {
     setStreaming(true)
 
     try {
+      const token = getAccessToken()
       const res = await fetch('/api/ask', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
         body: JSON.stringify({ doc_id: docId, question, action }),
         signal: controller.signal,
       })
