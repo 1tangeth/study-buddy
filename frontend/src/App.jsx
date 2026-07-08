@@ -8,6 +8,7 @@ import FlashCards from './components/FlashCards.jsx'
 import QuizMode from './components/QuizMode.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 import { useStream } from './hooks/useStream.js'
+import PlannerPage from './pages/PlannerPage.jsx'
 
 const ACTIONS = [
   { id: 'explain',   label: 'Explain Simply',    prompt: 'Explain the key concepts from this document simply.' },
@@ -31,6 +32,7 @@ export default function App() {
 }
 
 function AuthenticatedApp({ user, onLogout }) {
+  const [mode, setMode] = useState('chat') // 'chat' | 'planner'
   const [doc, setDoc] = useState(null)
   const [docHistory, setDocHistory] = useState([])
   const [sessionId, setSessionId] = useState(null)
@@ -195,42 +197,62 @@ function AuthenticatedApp({ user, onLogout }) {
           </div>
         </div>
 
-        <UploadZone
-          uploading={uploading}
-          dragOver={dragOver}
-          onUpload={handleUpload}
-          onDragOver={setDragOver}
-        />
+        {/* Mode toggle */}
+        <div className="mode-toggle">
+          <button
+            className={`mode-btn${mode === 'chat' ? ' active' : ''}`}
+            onClick={() => setMode('chat')}
+          >
+            Chat
+          </button>
+          <button
+            className={`mode-btn${mode === 'planner' ? ' active' : ''}`}
+            onClick={() => setMode('planner')}
+          >
+            Planner
+          </button>
+        </div>
 
-        {uploadError && <p className="upload-error">{uploadError}</p>}
+        {mode === 'chat' && (
+          <>
+            <UploadZone
+              uploading={uploading}
+              dragOver={dragOver}
+              onUpload={handleUpload}
+              onDragOver={setDragOver}
+            />
 
-        {docHistory.length > 0 && (
-          <div className="doc-history">
-            <p className="doc-history-label">My Documents</p>
-            <ul className="doc-history-list">
-              {docHistory.map(d => (
-                <li
-                  key={d.id}
-                  className={`doc-history-item${doc?.doc_id === d.id ? ' active' : ''}`}
-                  onClick={() => handleSelectDoc(d)}
-                  title={d.filename}
-                >
-                  <span className="dh-icon">📄</span>
-                  <div className="dh-details">
-                    <span className="dh-name">{d.filename}</span>
-                    <span className="dh-meta">{d.charCount.toLocaleString()} chars</span>
-                  </div>
-                  <button
-                    className="dh-delete"
-                    onClick={e => handleDeleteDoc(e, d.id)}
-                    title="Delete document"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+            {uploadError && <p className="upload-error">{uploadError}</p>}
+
+            {docHistory.length > 0 && (
+              <div className="doc-history">
+                <p className="doc-history-label">My Documents</p>
+                <ul className="doc-history-list">
+                  {docHistory.map(d => (
+                    <li
+                      key={d.id}
+                      className={`doc-history-item${doc?.doc_id === d.id ? ' active' : ''}`}
+                      onClick={() => handleSelectDoc(d)}
+                      title={d.filename}
+                    >
+                      <span className="dh-icon">📄</span>
+                      <div className="dh-details">
+                        <span className="dh-name">{d.filename}</span>
+                        <span className="dh-meta">{d.charCount.toLocaleString()} chars</span>
+                      </div>
+                      <button
+                        className="dh-delete"
+                        onClick={e => handleDeleteDoc(e, d.id)}
+                        title="Delete document"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
 
         <div className="lang-selector">
@@ -251,7 +273,13 @@ function AuthenticatedApp({ user, onLogout }) {
         </div>
       </aside>
 
-      <main className="chat-panel">
+      {mode === 'planner' && (
+        <main className="planner-main">
+          <PlannerPage documents={docHistory} />
+        </main>
+      )}
+
+      {mode === 'chat' && <main className="chat-panel">
         {quizLoading && (
           <div className="quiz-loading">
             <div className="quiz-spinner" />
@@ -351,7 +379,7 @@ function AuthenticatedApp({ user, onLogout }) {
             </div>
           </>
         )}
-      </main>
+      </main>}
     </div>
   )
 }

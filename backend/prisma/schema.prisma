@@ -17,6 +17,8 @@ model User {
   documents    Document[]
   chatSessions ChatSession[]
   quizAttempts QuizAttempt[]
+  studyPlans   StudyPlan[]
+  topicMastery TopicMastery[]
 
   @@map("users")
 }
@@ -30,12 +32,94 @@ model Document {
   contentHash String?  @map("content_hash")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chatSessions ChatSession[]
-  quizAttempts QuizAttempt[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatSessions  ChatSession[]
+  quizAttempts  QuizAttempt[]
+  planDocuments PlanDocument[]
+  studyTopics   StudyTopic[]
 
   @@unique([userId, contentHash])
   @@map("documents")
+}
+
+// ── Study Planner ─────────────────────────────────────────────────────────
+
+model StudyPlan {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  startDate   DateTime @map("start_date") @db.Date
+  targetDate  DateTime @map("target_date") @db.Date
+  hoursPerDay Float    @map("hours_per_day")
+  daysOfWeek  Int[]    @map("days_of_week")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents PlanDocument[]
+  blocks    ScheduledBlock[]
+
+  @@map("study_plans")
+}
+
+model PlanDocument {
+  planId     String @map("plan_id")
+  documentId String @map("document_id")
+
+  plan     StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([planId, documentId])
+  @@map("plan_documents")
+}
+
+model StudyTopic {
+  id               String   @id @default(uuid())
+  documentId       String   @map("document_id")
+  name             String
+  estimatedMinutes Int      @map("estimated_minutes")
+  difficulty       Int
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  document Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  blocks   ScheduledBlock[]
+  mastery  TopicMastery[]
+
+  @@map("study_topics")
+}
+
+model ScheduledBlock {
+  id              String   @id @default(uuid())
+  planId          String   @map("plan_id")
+  topicId         String   @map("topic_id")
+  date            DateTime @map("date") @db.Date
+  startTime       String   @map("start_time")
+  durationMinutes Int      @map("duration_minutes")
+  type            String
+  completed       Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  plan  StudyPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  topic StudyTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("scheduled_blocks")
+}
+
+model TopicMastery {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  topicId     String   @map("topic_id")
+  interval    Int      @default(1)
+  easeFactor  Float    @default(2.5) @map("ease_factor")
+  repetitions Int      @default(0)
+  nextReview  DateTime @map("next_review") @db.Date
+  lastScore   Int      @default(0) @map("last_score")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic StudyTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@map("topic_mastery")
 }
 
 model ChatSession {

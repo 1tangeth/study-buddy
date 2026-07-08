@@ -8,6 +8,8 @@ import { hashPassword, signAccessToken, signRefreshToken, verifyPassword, verify
 import { db } from './db'
 import { extractText } from './extract'
 import { type AuthRequest, requireAuth } from './middleware/requireAuth'
+import { buildSchedule, extractTopics } from './planner'
+import { updateMastery } from './spacedRepetition'
 import { getDoc, saveDoc } from './store'
 
 export const app = express()
@@ -410,7 +412,7 @@ app.post('/api/quiz', requireAuth, async (req, res) => {
   }
 })
 
-// save quiz score after user finishes
+// save quiz score after user finishes + update spaced repetition mastery
 app.post('/api/quiz/attempt', requireAuth, async (req, res) => {
   const { userId } = req as AuthRequest
   const { doc_id, score, total, language = 'english' } = req.body as {
@@ -419,8 +421,222 @@ app.post('/api/quiz/attempt', requireAuth, async (req, res) => {
   if (!doc_id || score == null || total == null) {
     return res.status(400).json({ detail: 'doc_id, score, and total are required' })
   }
-  const attempt = await db.quizAttempt.create({
-    data: { userId, documentId: doc_id, score, total, language },
-  })
+
+  const [attempt] = await Promise.all([
+    db.quizAttempt.create({ data: { userId, documentId: doc_id, score, total, language } }),
+    // update SM-2 mastery for every topic linked to this document
+    (async () => {
+      const pct = Math.round((score / total) * 100)
+      const topics = await db.studyTopic.findMany({ where: { documentId: doc_id } })
+      for (const topic of topics) {
+        const existing = await db.topicMastery.findUnique({ where: { userId_topicId: { userId, topicId: topic.id } } })
+        const state = existing ?? { interval: 1, easeFactor: 2.5, repetitions: 0 }
+        const updated = updateMastery(state, pct)
+        await db.topicMastery.upsert({
+          where: { userId_topicId: { userId, topicId: topic.id } },
+          create: { userId, topicId: topic.id, ...updated, lastScore: pct },
+          update: { ...updated, lastScore: pct },
+        })
+      }
+    })(),
+  ])
+
   res.status(201).json(attempt)
+})
+
+// ── Study Planner ─────────────────────────────────────────────────────────
+
+// Create plan: extract topics via AI, build schedule, persist everything
+app.post('/api/study-plans', requireAuth, async (req, res) => {
+  const { userId } = req as AuthRequest
+  const { name, docIds, startDate, targetDate, hoursPerDay, daysOfWeek } = req.body as {
+    name: string
+    docIds: string[]
+    startDate: string
+    targetDate: string
+    hoursPerDay: number
+    daysOfWeek: number[]
+  }
+
+  if (!name || !docIds?.length || !startDate || !targetDate || !hoursPerDay || !daysOfWeek?.length) {
+    return res.status(400).json({ detail: 'Missing required fields' })
+  }
+
+  // verify all docs belong to this user
+  const docs = await db.document.findMany({ where: { id: { in: docIds }, userId } })
+  if (docs.length !== docIds.length) return res.status(400).json({ detail: 'One or more documents not found' })
+
+  try {
+    // 1. Extract topics from each document via AI
+    const allTopics: { docId: string; topics: Awaited<ReturnType<typeof extractTopics>> }[] = []
+    for (const doc of docs) {
+      const topics = await extractTopics(doc.text)
+      allTopics.push({ docId: doc.id, topics })
+    }
+
+    // 2. Create the plan
+    const plan = await db.studyPlan.create({
+      data: {
+        userId,
+        name,
+        startDate: new Date(startDate),
+        targetDate: new Date(targetDate),
+        hoursPerDay,
+        daysOfWeek,
+        documents: { create: docIds.map(id => ({ documentId: id })) },
+      },
+    })
+
+    // 3. Save topics to DB
+    const savedTopics = await Promise.all(
+      allTopics.flatMap(({ docId, topics }) =>
+        topics.map(t =>
+          db.studyTopic.create({
+            data: { documentId: docId, name: t.name, difficulty: t.difficulty, estimatedMinutes: t.estimatedMinutes },
+          })
+        )
+      )
+    )
+
+    // 4. Load existing mastery for these topics
+    const masteryRows = await db.topicMastery.findMany({ where: { userId, topicId: { in: savedTopics.map(t => t.id) } } })
+    const masteryMap = new Map(masteryRows.map(m => [m.topicId, m]))
+
+    const topicsWithMastery = savedTopics.map(t => ({
+      id: t.id,
+      name: t.name,
+      difficulty: t.difficulty,
+      estimatedMinutes: t.estimatedMinutes,
+      lastScore: masteryMap.get(t.id)?.lastScore ?? 0,
+      nextReview: masteryMap.get(t.id)?.nextReview ?? null,
+    }))
+
+    // 5. Build schedule
+    const blockInputs = buildSchedule(topicsWithMastery, new Date(startDate), new Date(targetDate), hoursPerDay, daysOfWeek)
+
+    // 6. Persist blocks
+    await db.scheduledBlock.createMany({
+      data: blockInputs.map(b => ({
+        planId: plan.id,
+        topicId: b.topicId,
+        date: b.date,
+        startTime: b.startTime,
+        durationMinutes: b.durationMinutes,
+        type: b.type,
+      })),
+    })
+
+    res.status(201).json({ planId: plan.id, topicsCreated: savedTopics.length, blocksCreated: blockInputs.length })
+  } catch (e: any) {
+    res.status(500).json({ detail: e.message ?? 'Failed to create study plan' })
+  }
+})
+
+// List user's study plans
+app.get('/api/study-plans', requireAuth, async (req, res) => {
+  const { userId } = req as AuthRequest
+  const plans = await db.studyPlan.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      documents: { include: { document: { select: { id: true, filename: true } } } },
+      blocks: { select: { completed: true } },
+    },
+  })
+  res.json(plans.map(p => ({
+    id: p.id,
+    name: p.name,
+    startDate: p.startDate,
+    targetDate: p.targetDate,
+    hoursPerDay: p.hoursPerDay,
+    daysOfWeek: p.daysOfWeek,
+    documents: p.documents.map(pd => pd.document),
+    totalBlocks: p.blocks.length,
+    completedBlocks: p.blocks.filter(b => b.completed).length,
+  })))
+})
+
+// Get blocks for a specific week (date = any day in that week)
+app.get('/api/study-plans/:id/week', requireAuth, async (req, res) => {
+  const { userId } = req as AuthRequest
+  const plan = await db.studyPlan.findUnique({ where: { id: req.params.id } })
+  if (!plan || plan.userId !== userId) return res.status(404).json({ detail: 'Plan not found' })
+
+  // compute Mon–Sun for the week containing `date` param (default today)
+  const anchor = req.query.date ? new Date(req.query.date as string) : new Date()
+  const day = anchor.getDay() // 0=Sun
+  const monday = new Date(anchor)
+  monday.setDate(anchor.getDate() - ((day + 6) % 7))
+  monday.setHours(0, 0, 0, 0)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59, 999)
+
+  const blocks = await db.scheduledBlock.findMany({
+    where: { planId: plan.id, date: { gte: monday, lte: sunday } },
+    include: { topic: { include: { document: { select: { id: true, filename: true } } } } },
+    orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+  })
+
+  res.json({ weekStart: monday, weekEnd: sunday, blocks })
+})
+
+// Mark a block complete or incomplete
+app.patch('/api/scheduled-blocks/:id', requireAuth, async (req, res) => {
+  const { userId } = req as AuthRequest
+  const { completed } = req.body as { completed: boolean }
+  const block = await db.scheduledBlock.findUnique({ where: { id: req.params.id }, include: { plan: true } })
+  if (!block || block.plan.userId !== userId) return res.status(404).json({ detail: 'Block not found' })
+  const updated = await db.scheduledBlock.update({ where: { id: req.params.id }, data: { completed } })
+  res.json(updated)
+})
+
+// Re-run scheduling from today using current mastery data
+app.post('/api/study-plans/:id/reschedule', requireAuth, async (req, res) => {
+  const { userId } = req as AuthRequest
+  const plan = await db.studyPlan.findUnique({
+    where: { id: req.params.id },
+    include: { blocks: true },
+  })
+  if (!plan || plan.userId !== userId) return res.status(404).json({ detail: 'Plan not found' })
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // wipe ALL future blocks so reschedule starts completely fresh from today
+  await db.scheduledBlock.deleteMany({
+    where: { planId: plan.id, date: { gte: today } },
+  })
+
+  // reload topics + mastery
+  const topics = await db.studyTopic.findMany({
+    where: { document: { planDocuments: { some: { planId: plan.id } } } },
+  })
+  const masteryRows = await db.topicMastery.findMany({ where: { userId, topicId: { in: topics.map(t => t.id) } } })
+  const masteryMap = new Map(masteryRows.map(m => [m.topicId, m]))
+
+  const topicsWithMastery = topics.map(t => ({
+    id: t.id,
+    name: t.name,
+    difficulty: t.difficulty,
+    estimatedMinutes: t.estimatedMinutes,
+    lastScore: masteryMap.get(t.id)?.lastScore ?? 0,
+    nextReview: masteryMap.get(t.id)?.nextReview ?? null,
+  }))
+
+  const targetDate = new Date(plan.targetDate) < today ? today : new Date(plan.targetDate)
+  const blockInputs = buildSchedule(topicsWithMastery, today, targetDate, plan.hoursPerDay, plan.daysOfWeek)
+
+  await db.scheduledBlock.createMany({
+    data: blockInputs.map(b => ({
+      planId: plan.id,
+      topicId: b.topicId,
+      date: b.date,
+      startTime: b.startTime,
+      durationMinutes: b.durationMinutes,
+      type: b.type,
+    })),
+  })
+
+  res.json({ rescheduled: blockInputs.length })
 })
