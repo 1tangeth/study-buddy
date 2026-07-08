@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { marked } from './lib/md.js'
 import 'katex/dist/katex.min.css'
 import './App.css'
-import { fetchFlashcards, fetchQuiz, uploadFile } from './api.js'
+import { deleteDocument, fetchActiveSession, fetchDocuments, fetchFlashcards, fetchQuiz, uploadFile } from './api.js'
+import AuthPage from './components/AuthPage.jsx'
 import FlashCards from './components/FlashCards.jsx'
 import QuizMode from './components/QuizMode.jsx'
+import { useAuth } from './context/AuthContext.jsx'
 import { useStream } from './hooks/useStream.js'
 
 const ACTIONS = [
@@ -16,7 +18,22 @@ const ACTIONS = [
 ]
 
 export default function App() {
+  const { user, logout } = useAuth()
+
+  if (user === undefined) {
+    return <div className="auth-loading"><div className="auth-spinner" /></div>
+  }
+  if (user === null) {
+    return <AuthPage />
+  }
+
+  return <AuthenticatedApp user={user} onLogout={logout} />
+}
+
+function AuthenticatedApp({ user, onLogout }) {
   const [doc, setDoc] = useState(null)
+  const [docHistory, setDocHistory] = useState([])
+  const [sessionId, setSessionId] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -34,8 +51,57 @@ export default function App() {
   const { stream, streaming } = useStream()
 
   useEffect(() => {
+    loadDocHistory()
+  }, [])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  async function loadDocHistory() {
+    try {
+      const docs = await fetchDocuments()
+      setDocHistory(docs)
+    } catch { /* silently ignore */ }
+  }
+
+  async function handleSelectDoc(histDoc) {
+    setDoc({
+      doc_id: histDoc.id,
+      filename: histDoc.filename,
+      char_count: histDoc.charCount,
+      preview: histDoc.preview,
+    })
+    setFlashData(null)
+    setFlashError('')
+    setQuizData(null)
+    setQuizError('')
+
+    // restore the most recent chat session for this document
+    const session = await fetchActiveSession(histDoc.id)
+    if (session) {
+      setSessionId(session.sessionId)
+      setMessages(session.messages.map(m => ({ role: m.role, content: m.content })))
+    } else {
+      setSessionId(null)
+      setMessages([])
+    }
+    inputRef.current?.focus()
+  }
+
+  async function handleDeleteDoc(e, docId) {
+    e.stopPropagation()
+    try {
+      await deleteDocument(docId)
+      setDocHistory(prev => prev.filter(d => d.id !== docId))
+      if (doc?.doc_id === docId) {
+        setDoc(null)
+        setMessages([])
+        setFlashData(null)
+        setQuizData(null)
+      }
+    } catch { /* ignore */ }
+  }
 
   async function handleUpload(file) {
     if (!file) return
@@ -44,12 +110,14 @@ export default function App() {
     try {
       const result = await uploadFile(file)
       setDoc(result)
+      setSessionId(null)
       setMessages([])
       setFlashData(null)
       setFlashError('')
       setQuizData(null)
       setQuizError('')
       inputRef.current?.focus()
+      loadDocHistory()
     } catch (e) {
       setUploadError(e.message)
     } finally {
@@ -96,6 +164,8 @@ export default function App() {
       docId: doc.doc_id,
       question,
       action,
+      sessionId,
+      onSession: id => setSessionId(id),
       onDelta: delta =>
         setMessages(prev => {
           const next = [...prev]
@@ -117,7 +187,13 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1 className="logo">Study Buddy</h1>
+        <div className="sidebar-header">
+          <h1 className="logo">Study Buddy</h1>
+          <div className="user-menu">
+            <span className="user-name">{user.displayName || user.email}</span>
+            <button className="logout-btn" onClick={onLogout}>Log out</button>
+          </div>
+        </div>
 
         <UploadZone
           uploading={uploading}
@@ -128,20 +204,32 @@ export default function App() {
 
         {uploadError && <p className="upload-error">{uploadError}</p>}
 
-        {doc && (
-          <div className="doc-card">
-            <div className="doc-icon">📄</div>
-            <div className="doc-details">
-              <span className="doc-name" title={doc.filename}>{doc.filename}</span>
-              <span className="doc-meta">{doc.char_count.toLocaleString()} characters</span>
-            </div>
-          </div>
-        )}
-
-        {doc && (
-          <div className="doc-preview">
-            <p className="preview-label">Preview</p>
-            <p className="preview-text">{doc.preview}…</p>
+        {docHistory.length > 0 && (
+          <div className="doc-history">
+            <p className="doc-history-label">My Documents</p>
+            <ul className="doc-history-list">
+              {docHistory.map(d => (
+                <li
+                  key={d.id}
+                  className={`doc-history-item${doc?.doc_id === d.id ? ' active' : ''}`}
+                  onClick={() => handleSelectDoc(d)}
+                  title={d.filename}
+                >
+                  <span className="dh-icon">📄</span>
+                  <div className="dh-details">
+                    <span className="dh-name">{d.filename}</span>
+                    <span className="dh-meta">{d.charCount.toLocaleString()} chars</span>
+                  </div>
+                  <button
+                    className="dh-delete"
+                    onClick={e => handleDeleteDoc(e, d.id)}
+                    title="Delete document"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

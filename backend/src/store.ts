@@ -18,15 +18,12 @@ const order: string[] = []
  * @param text 
  * @returns 
  */
-export function saveDoc(filename: string, text: string): string {
-  // create a number id for document
-  const docId = crypto.randomUUID()
-  // remove oldest doc if I now have more than maximum document allowed
+export function saveDoc(filename: string, text: string, id?: string): string {
+  const docId = id ?? crypto.randomUUID()
   if (order.length >= MAX_DOCS) {
     const oldest = order.shift()!
     store.delete(oldest)
   }
-
   store.set(docId, {
     docId,
     filename,

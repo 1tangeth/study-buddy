@@ -174,7 +174,7 @@ export async function generateFlashcards(docText: string): Promise<FlashcardDeck
   try {
     const { text: analysisText } = await generateText({
       model: gemini(MODEL),
-      system: DOC_ANALYSIS_PROMPT,
+      system: DOC_ANALYSIS_PROMPT, // this is whats asked
       messages: [{ role: 'user', content: `Document:\n\n${truncated.slice(0, 6_000)}` }],
       maxTokens: 128,
       temperature: 0.2,
@@ -223,6 +223,8 @@ const LANGUAGE_NAMES: Record<string, string> = {
   french: 'French',
 }
 
+// If not written in preferred language, write all question both in preferred language and document language
+// if already in preferred language, just write in preferred language only
 function bilingualInstruction(preferredLang: string): string {
   const preferred = LANGUAGE_NAMES[preferredLang] ?? 'English'
   return `
