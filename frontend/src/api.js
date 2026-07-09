@@ -130,54 +130,46 @@ export async function saveQuizAttempt(docId, score, total, language) {
   if (!res.ok) throw new Error('Failed to save quiz attempt')
 }
 
-// ── Study Planner API ─────────────────────────────────────────────────────
+// ── Calendar API ──────────────────────────────────────────────────────────
 
-export async function createStudyPlan({ name, docIds, startDate, targetDate, hoursPerDay, daysOfWeek }) {
-  const res = await fetch('/api/study-plans', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    credentials: 'include',
-    body: JSON.stringify({ name, docIds, startDate, targetDate, hoursPerDay, daysOfWeek }),
-  })
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.detail || 'Failed to create study plan')
-  return body
-}
-
-export async function fetchStudyPlans() {
-  const res = await fetch('/api/study-plans', { headers: authHeaders(), credentials: 'include' })
-  if (!res.ok) throw new Error('Failed to load study plans')
-  return res.json()
-}
-
-export async function fetchPlanWeek(planId, date) {
-  const dateStr = date ? date.toISOString().split('T')[0] : ''
-  const res = await fetch(`/api/study-plans/${planId}/week?date=${dateStr}`, {
+export async function fetchCalendarWeek(monday) {
+  const weekStart = monday instanceof Date ? monday.toISOString().split('T')[0] : monday
+  const res = await fetch(`/api/calendar?weekStart=${weekStart}`, {
     headers: authHeaders(),
     credentials: 'include',
   })
-  if (!res.ok) throw new Error('Failed to load week schedule')
+  if (!res.ok) throw new Error('Failed to load calendar')
   return res.json()
 }
 
-export async function updateBlock(blockId, completed) {
-  const res = await fetch(`/api/scheduled-blocks/${blockId}`, {
+export async function createCalendarEvent({ date, startTime, title = 'Study', durationMinutes = 60 }) {
+  const res = await fetch('/api/calendar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
+    body: JSON.stringify({ date, startTime, title, durationMinutes }),
+  })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.detail || 'Failed to create event')
+  return body
+}
+
+export async function updateCalendarEvent(id, patch) {
+  const res = await fetch(`/api/calendar/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     credentials: 'include',
-    body: JSON.stringify({ completed }),
+    body: JSON.stringify(patch),
   })
-  if (!res.ok) throw new Error('Failed to update block')
+  if (!res.ok) throw new Error('Failed to update event')
   return res.json()
 }
 
-export async function reschedulePlan(planId) {
-  const res = await fetch(`/api/study-plans/${planId}/reschedule`, {
-    method: 'POST',
+export async function deleteCalendarEvent(id) {
+  const res = await fetch(`/api/calendar/${id}`, {
+    method: 'DELETE',
     headers: authHeaders(),
     credentials: 'include',
   })
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.detail || 'Failed to reschedule')
-  return body
+  if (!res.ok) throw new Error('Failed to delete event')
 }

@@ -275,7 +275,7 @@ function AuthenticatedApp({ user, onLogout }) {
 
       {mode === 'planner' && (
         <main className="planner-main">
-          <PlannerPage documents={docHistory} />
+          <PlannerPage />
         </main>
       )}
 

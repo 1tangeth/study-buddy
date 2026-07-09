@@ -14,11 +14,12 @@ model User {
   displayName  String?  @map("display_name")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  documents    Document[]
-  chatSessions ChatSession[]
-  quizAttempts QuizAttempt[]
-  studyPlans   StudyPlan[]
-  topicMastery TopicMastery[]
+  documents      Document[]
+  chatSessions   ChatSession[]
+  quizAttempts   QuizAttempt[]
+  studyPlans     StudyPlan[]
+  topicMastery   TopicMastery[]
+  calendarEvents CalendarEvent[]
 
   @@map("users")
 }
@@ -162,4 +163,18 @@ model QuizAttempt {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("quiz_attempts")
+}
+
+model CalendarEvent {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  title           String   @default("Study")
+  date            DateTime @db.Date
+  startTime       String   @map("start_time")
+  durationMinutes Int      @default(60) @map("duration_minutes")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("calendar_events")
 }
